@@ -18,7 +18,7 @@ def preprocess_with_preplify(
     feature_engineering: bool,
     fill_value: str,
 ) -> Tuple[pd.DataFrame, List[str]]:
-    """Preprocess a DataFrame with Preplify and return logs for the UI."""
+    """Run Preplify preprocessing and capture a readable log for the UI."""
     logs: List[str] = []
     work_df = df.copy()
 
@@ -33,13 +33,8 @@ def preprocess_with_preplify(
                 "encoding": encoding,
                 "scaling": scaling,
                 "feature_engineering": feature_engineering,
+                "outlier_method": None if outlier_method == "none" else outlier_method,
             }
-
-            if outlier_method != "none":
-                pipeline_kwargs["outlier_method"] = outlier_method
-            else:
-                pipeline_kwargs["outlier_method"] = None
-
             if missing_strategy == "constant":
                 parsed_fill_value = _coerce_fill_value(fill_value)
                 pipeline_kwargs["fill_value"] = parsed_fill_value
