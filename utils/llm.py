@@ -76,20 +76,20 @@ def resolve_llm_config(
         }
 
     # Auto (from env)
-    if os.getenv("OPENAI_API_KEY"):
-        return {
-            "provider": "openai",
-            "api_key": os.getenv("OPENAI_API_KEY", ""),
-            "base_url": os.getenv("OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL),
-            "model": manual_model or os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
-        }
-
     if os.getenv("GROQ_API_KEY"):
         return {
             "provider": "groq",
             "api_key": os.getenv("GROQ_API_KEY", ""),
             "base_url": os.getenv("GROQ_BASE_URL", DEFAULT_GROQ_BASE_URL),
             "model": manual_model or os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL),
+        }
+
+    if os.getenv("OPENAI_API_KEY"):
+        return {
+            "provider": "openai",
+            "api_key": os.getenv("OPENAI_API_KEY", ""),
+            "base_url": os.getenv("OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL),
+            "model": manual_model or os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
         }
 
     return {

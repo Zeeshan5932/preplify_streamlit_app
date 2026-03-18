@@ -222,7 +222,15 @@ def build_llm_sidebar() -> tuple:
         )
 
         st.info(llm_status(llm_cfg))
-        st.caption(f"Active provider: {llm_cfg['provider']} | Model: {llm_cfg['model']}")
+        st.code(
+            {
+                "provider": llm_cfg["provider"],
+                "base_url": llm_cfg["base_url"],
+                "has_api_key": bool(llm_cfg["api_key"]),
+                "api_key_prefix": llm_cfg["api_key"][:5] if llm_cfg["api_key"] else "",
+            },
+            language="python",
+        )
 
     return uploaded_file, llm_cfg
 
