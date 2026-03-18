@@ -116,15 +116,16 @@ def llm_status(config: Dict[str, str] | None = None) -> str:
         return "OpenAI selected but no API key found."
 
     if provider == "groq":
-        if not GROQ_AVAILABLE:
-            return f"Groq SDK not installed. Details: {GROQ_IMPORT_ERROR}"
-        if api_key:
-            return f"LLM ready: Groq | model={model}"
-        return "Groq selected but no API key found."
+        if not GROQ_AVAILABLE or Groq is None:
+            raise RuntimeError(f"Groq SDK import failed: {GROQ_IMPORT_ERROR}")
+        key = api_key or os.getenv("GROQ_API_KEY")
+        if not key:
+            raise RuntimeError("Missing GROQ_API_KEY.")
+        return f"LLM ready: Groq | model={model}"
 
     if provider == "custom":
-        if not OPENAI_AVAILABLE:
-            return f"OpenAI SDK required for custom OpenAI-compatible APIs. Details: {OPENAI_IMPORT_ERROR}"
+        if not OPENAI_AVAILABLE or OpenAI is None:
+            raise RuntimeError(f"OpenAI SDK import failed: {OPENAI_IMPORT_ERROR}")
         if api_key and config.get("base_url"):
             return f"LLM ready: Custom API | model={model}"
         return "Custom provider selected but API key or base URL is missing."
@@ -150,7 +151,14 @@ def get_client(
         key = api_key or os.getenv("GROQ_API_KEY")
         if not key:
             raise RuntimeError("Missing GROQ_API_KEY.")
-        return Groq(api_key=key)
+        kwargs: Dict[str, Any] = {"api_key": key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        else:
+            env_base_url = os.getenv("GROQ_BASE_URL")
+            if env_base_url:
+                kwargs["base_url"] = env_base_url
+        return Groq(**kwargs)
 
     if provider in {"openai", "custom"}:
         if not OPENAI_AVAILABLE or OpenAI is None:
