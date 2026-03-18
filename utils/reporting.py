@@ -1,35 +1,83 @@
 from __future__ import annotations
 
-import io
-from contextlib import redirect_stdout
+import json
 from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
-from preplify import data_report, recommend_preprocessing
 
 
-def build_dataset_profile(df: pd.DataFrame) -> Dict[str, Any]:
+
+def infer_task_type(series: pd.Series) -> str:
+    if series.dtype == object or str(series.dtype).startswith("category") or series.dtype == bool:
+        return "classification"
+    unique = series.nunique(dropna=True)
+    total = max(len(series), 1)
+    ratio = unique / total
+    if unique <= 20 or ratio < 0.05:
+        return "classification"
+    return "regression"
+
+
+
+def basic_profile(df: pd.DataFrame) -> Dict[str, Any]:
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     categorical_cols = df.select_dtypes(exclude="number").columns.tolist()
-    missing_total = int(df.isna().sum().sum())
-    duplicate_rows = int(df.duplicated().sum())
-    memory_mb = float(df.memory_usage(deep=True).sum() / (1024 ** 2))
 
     return {
         "rows": int(df.shape[0]),
         "columns": int(df.shape[1]),
-        "missing_values": missing_total,
-        "duplicate_rows": duplicate_rows,
-        "numeric_columns": len(numeric_cols),
-        "categorical_columns": len(categorical_cols),
-        "memory_mb": round(memory_mb, 2),
-        "health_score": compute_health_score(df),
+        "numeric_columns": numeric_cols,
+        "categorical_columns": categorical_cols,
+        "missing_total": int(df.isna().sum().sum()),
+        "duplicate_rows": int(df.duplicated().sum()),
+        "memory_mb": round(df.memory_usage(deep=True).sum() / (1024 * 1024), 3),
+        "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
     }
 
 
-def build_column_summary(df: pd.DataFrame) -> pd.DataFrame:
-    rows = []
+
+def health_score(df: pd.DataFrame) -> Dict[str, Any]:
+    rows, cols = df.shape
+    total_cells = max(rows * max(cols, 1), 1)
+    missing_ratio = float(df.isna().sum().sum() / total_cells)
+    duplicate_ratio = float(df.duplicated().mean()) if rows > 0 else 0.0
+
+    numeric = df.select_dtypes(include="number")
+    outlier_ratio = 0.0
+    if not numeric.empty:
+        q1 = numeric.quantile(0.25)
+        q3 = numeric.quantile(0.75)
+        iqr = (q3 - q1).replace(0, np.nan)
+        lower = q1 - 1.5 * iqr
+        upper = q3 + 1.5 * iqr
+        mask = ((numeric < lower) | (numeric > upper)).fillna(False)
+        outlier_ratio = float(mask.mean().mean()) if mask.size else 0.0
+
+    raw_score = 100 - (missing_ratio * 45 + duplicate_ratio * 20 + outlier_ratio * 35) * 100
+    score = int(max(0, min(100, round(raw_score))))
+
+    if score >= 85:
+        level = "Excellent"
+    elif score >= 70:
+        level = "Good"
+    elif score >= 50:
+        level = "Needs attention"
+    else:
+        level = "Poor"
+
+    return {
+        "score": score,
+        "level": level,
+        "missing_ratio": round(missing_ratio, 4),
+        "duplicate_ratio": round(duplicate_ratio, 4),
+        "outlier_ratio": round(outlier_ratio, 4),
+    }
+
+
+
+def column_summary(df: pd.DataFrame) -> pd.DataFrame:
+    rows: List[Dict[str, Any]] = []
     for col in df.columns:
         series = df[col]
         rows.append(
@@ -37,130 +85,87 @@ def build_column_summary(df: pd.DataFrame) -> pd.DataFrame:
                 "column": col,
                 "dtype": str(series.dtype),
                 "missing": int(series.isna().sum()),
-                "missing_%": round(float(series.isna().mean() * 100), 2),
-                "unique_values": int(series.nunique(dropna=False)),
-                "sample": _safe_sample(series),
+                "missing_pct": round(float(series.isna().mean() * 100), 2),
+                "unique": int(series.nunique(dropna=True)),
+                "sample": str(series.dropna().iloc[0]) if series.dropna().shape[0] else "",
             }
         )
     return pd.DataFrame(rows)
 
 
-def compute_health_score(df: pd.DataFrame) -> int:
-    rows, cols = df.shape
-    if rows == 0 or cols == 0:
-        return 0
 
-    missing_ratio = float(df.isna().sum().sum()) / max(rows * cols, 1)
-    duplicate_ratio = float(df.duplicated().sum()) / max(rows, 1)
-    constant_cols = int(df.nunique(dropna=False).le(1).sum())
-    constant_ratio = constant_cols / max(cols, 1)
-
-    penalty = (missing_ratio * 45) + (duplicate_ratio * 30) + (constant_ratio * 25)
-    score = max(0, min(100, round(100 - penalty * 100)))
-    return int(score)
-
-
-def generate_smart_insights(df: pd.DataFrame) -> List[str]:
-    insights: List[str] = []
-    profile = build_dataset_profile(df)
-
-    if profile["missing_values"] > 0:
-        top_missing = df.isna().mean().sort_values(ascending=False)
-        top_missing = top_missing[top_missing > 0].head(3)
-        parts = [f"{col} ({val * 100:.1f}%)" for col, val in top_missing.items()]
-        insights.append("Highest missingness appears in: " + ", ".join(parts) + ".")
-
-    if profile["duplicate_rows"] > 0:
-        insights.append(f"Dataset contains {profile['duplicate_rows']} duplicate rows that may distort training.")
-
-    numeric_df = df.select_dtypes(include="number")
-    if not numeric_df.empty:
-        skewness = numeric_df.skew(numeric_only=True).abs().sort_values(ascending=False)
-        skewness = skewness[skewness > 1.0]
-        if not skewness.empty:
-            top_skew = ", ".join([f"{col} ({val:.2f})" for col, val in skewness.head(3).items()])
-            insights.append(f"Highly skewed numeric columns detected: {top_skew}.")
-
-        corr = numeric_df.corr(numeric_only=True).abs()
-        if len(corr.columns) > 1:
-            upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
-            high_pairs = upper.stack().sort_values(ascending=False)
-            high_pairs = high_pairs[high_pairs > 0.85]
-            if not high_pairs.empty:
-                pair_names = []
-                for (a, b), value in high_pairs.head(3).items():
-                    pair_names.append(f"{a} ↔ {b} ({value:.2f})")
-                insights.append("Potential multicollinearity found in: " + "; ".join(pair_names) + ".")
-
-    categorical_df = df.select_dtypes(exclude="number")
-    if not categorical_df.empty:
-        high_card = []
-        for col in categorical_df.columns:
-            nunique = categorical_df[col].nunique(dropna=True)
-            if nunique > max(20, len(df) * 0.2):
-                high_card.append(f"{col} ({nunique} unique)")
-        if high_card:
-            insights.append("High-cardinality categorical columns may need careful encoding: " + ", ".join(high_card[:3]) + ".")
-
-    if not insights:
-        insights.append("This dataset looks fairly clean. You can move quickly into visualization and modeling.")
-
-    return insights
+def build_report_payload(
+    df: pd.DataFrame,
+    preplify_report: Dict[str, Any] | None = None,
+    recommendations: List[str] | None = None,
+) -> Dict[str, Any]:
+    payload = {
+        "profile": basic_profile(df),
+        "health": health_score(df),
+        "top_missing_columns": df.isna().sum().sort_values(ascending=False).head(10).to_dict(),
+        "column_summary": column_summary(df).to_dict(orient="records"),
+        "preplify_report": preplify_report or {},
+        "recommendations": recommendations or [],
+    }
+    return payload
 
 
-def capture_preplify_report(df: pd.DataFrame) -> str:
-    return _capture_output(data_report, df)
 
-
-def capture_preplify_recommendations(df: pd.DataFrame) -> str:
-    return _capture_output(recommend_preprocessing, df)
-
-
-def _capture_output(func, df: pd.DataFrame) -> str:
-    buffer = io.StringIO()
-    with redirect_stdout(buffer):
-        result = func(df)
-    text = buffer.getvalue().strip()
-    if text:
-        return text
-    if result is None:
-        return ""
-    return str(result)
-
-
-def report_to_markdown(df: pd.DataFrame) -> str:
-    profile = build_dataset_profile(df)
-    column_summary = build_column_summary(df)
-    insights = generate_smart_insights(df)
-
+def report_markdown(payload: Dict[str, Any]) -> str:
+    profile = payload.get("profile", {})
+    health = payload.get("health", {})
+    recs = payload.get("recommendations", [])
     lines = [
-        "# Preplify ML Studio Pro Report",
+        "# Smart Dataset Report",
         "",
-        "## Dataset Overview",
-        f"- Rows: {profile['rows']}",
-        f"- Columns: {profile['columns']}",
-        f"- Missing values: {profile['missing_values']}",
-        f"- Duplicate rows: {profile['duplicate_rows']}",
-        f"- Memory usage (MB): {profile['memory_mb']}",
-        f"- Data health score: {profile['health_score']}/100",
+        "## Dataset Snapshot",
+        f"- Rows: {profile.get('rows', 0)}",
+        f"- Columns: {profile.get('columns', 0)}",
+        f"- Numeric columns: {len(profile.get('numeric_columns', []))}",
+        f"- Categorical columns: {len(profile.get('categorical_columns', []))}",
+        f"- Missing cells: {profile.get('missing_total', 0)}",
+        f"- Duplicate rows: {profile.get('duplicate_rows', 0)}",
+        f"- Memory usage (MB): {profile.get('memory_mb', 0)}",
         "",
-        "## Smart Insights",
+        "## Data Health",
+        f"- Score: {health.get('score', 0)}/100",
+        f"- Level: {health.get('level', 'Unknown')}",
+        f"- Missing ratio: {health.get('missing_ratio', 0)}",
+        f"- Duplicate ratio: {health.get('duplicate_ratio', 0)}",
+        f"- Outlier ratio: {health.get('outlier_ratio', 0)}",
+        "",
+        "## Recommended Next Steps",
     ]
-    lines.extend([f"- {item}" for item in insights])
-    lines.extend(["", "## Column Summary"])
-
-    for _, row in column_summary.iterrows():
-        lines.append(
-            f"- {row['column']} | dtype={row['dtype']} | missing={row['missing']} | "
-            f"missing%={row['missing_%']} | unique={row['unique_values']} | sample={row['sample']}"
-        )
+    if recs:
+        lines.extend([f"- {item}" for item in recs])
+    else:
+        lines.append("- No recommendations were generated.")
     return "\n".join(lines)
 
 
-def _safe_sample(series: pd.Series) -> str:
-    non_null = series.dropna()
-    if non_null.empty:
-        return "NA"
-    value = non_null.iloc[0]
-    text = str(value)
-    return text[:50] + ("..." if len(text) > 50 else "")
+
+def report_html(payload: Dict[str, Any]) -> str:
+    markdown = report_markdown(payload).replace("\n", "<br>")
+    pretty_json = json.dumps(payload, indent=2)
+    return f"""
+    <html>
+    <head>
+        <title>Smart Dataset Report</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }}
+            .card {{ border: 1px solid #d1d5db; border-radius: 14px; padding: 18px; margin-bottom: 18px; }}
+            pre {{ white-space: pre-wrap; word-break: break-word; background: #f8fafc; padding: 14px; border-radius: 10px; }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1>Smart Dataset Report</h1>
+            <div>{markdown}</div>
+        </div>
+        <div class="card">
+            <h2>JSON Payload</h2>
+            <pre>{pretty_json}</pre>
+        </div>
+    </body>
+    </html>
+    """

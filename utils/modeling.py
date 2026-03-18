@@ -1,17 +1,21 @@
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, Tuple
 
 import numpy as np
 import pandas as pd
+from sklearn.base import RegressorMixin
+from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import (
     GradientBoostingClassifier,
     GradientBoostingRegressor,
+    IsolationForest,
     RandomForestClassifier,
     RandomForestRegressor,
 )
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
+from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
@@ -21,273 +25,243 @@ from sklearn.metrics import (
     precision_score,
     r2_score,
     recall_score,
-    roc_auc_score,
 )
-from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.svm import SVC, SVR
 
 
-def get_default_problem_type(target: pd.Series) -> str:
-    if str(target.dtype) == "object" or str(target.dtype).startswith("category"):
-        return "classification"
-    if target.nunique(dropna=True) <= 20:
-        return "classification"
-    return "regression"
+@dataclass
+class TrainResult:
+    model: Any
+    metrics: Dict[str, float]
+    predictions: pd.DataFrame
+    feature_importance: pd.DataFrame | None
+    confusion: pd.DataFrame | None
 
 
-def get_model_options(problem_type: str) -> Dict[str, str]:
-    if problem_type == "classification":
-        return {
-            "Logistic Regression": "logistic_regression",
-            "Random Forest": "random_forest_classifier",
-            "Gradient Boosting": "gradient_boosting_classifier",
-            "KNN": "knn_classifier",
-            "SVC": "svc",
-        }
-    return {
-        "Linear Regression": "linear_regression",
-        "Ridge Regression": "ridge",
-        "Random Forest": "random_forest_regressor",
-        "Gradient Boosting": "gradient_boosting_regressor",
-        "KNN": "knn_regressor",
-        "SVR": "svr",
-    }
 
-
-def build_model(problem_type: str, model_key: str, params: dict, random_state: int = 42):
-    if problem_type == "classification":
-        if model_key == "logistic_regression":
+def build_model(task: str, model_name: str, params: Dict[str, Any]):
+    if task == "classification":
+        if model_name == "Logistic Regression":
             return LogisticRegression(
-                C=params.get("C", 1.0),
-                max_iter=params.get("max_iter", 500),
-                random_state=random_state,
+                C=float(params.get("C", 1.0)),
+                max_iter=int(params.get("max_iter", 500)),
+                solver="lbfgs",
             )
-        if model_key == "random_forest_classifier":
+        if model_name == "Random Forest":
             return RandomForestClassifier(
-                n_estimators=params.get("n_estimators", 200),
-                max_depth=params.get("max_depth"),
-                min_samples_split=params.get("min_samples_split", 2),
-                random_state=random_state,
+                n_estimators=int(params.get("n_estimators", 200)),
+                max_depth=None if params.get("max_depth") in (None, 0, "0") else int(params.get("max_depth")),
+                min_samples_split=int(params.get("min_samples_split", 2)),
+                random_state=42,
             )
-        if model_key == "gradient_boosting_classifier":
+        if model_name == "Gradient Boosting":
             return GradientBoostingClassifier(
-                n_estimators=params.get("n_estimators", 150),
-                learning_rate=params.get("learning_rate", 0.1),
-                random_state=random_state,
+                n_estimators=int(params.get("n_estimators", 150)),
+                learning_rate=float(params.get("learning_rate", 0.1)),
+                random_state=42,
             )
-        if model_key == "knn_classifier":
-            return KNeighborsClassifier(
-                n_neighbors=params.get("n_neighbors", 5),
-                weights=params.get("weights", "uniform"),
-            )
-        if model_key == "svc":
-            return SVC(
-                C=params.get("C", 1.0),
-                kernel=params.get("kernel", "rbf"),
-                probability=True,
-                random_state=random_state,
-            )
+        if model_name == "KNN":
+            return KNeighborsClassifier(n_neighbors=int(params.get("n_neighbors", 5)))
+        if model_name == "SVM":
+            return SVC(C=float(params.get("C", 1.0)), kernel=params.get("kernel", "rbf"), probability=True)
     else:
-        if model_key == "linear_regression":
+        if model_name == "Linear Regression":
             return LinearRegression()
-        if model_key == "ridge":
-            return Ridge(alpha=params.get("alpha", 1.0), random_state=random_state)
-        if model_key == "random_forest_regressor":
+        if model_name == "Random Forest":
             return RandomForestRegressor(
-                n_estimators=params.get("n_estimators", 200),
-                max_depth=params.get("max_depth"),
-                min_samples_split=params.get("min_samples_split", 2),
-                random_state=random_state,
+                n_estimators=int(params.get("n_estimators", 200)),
+                max_depth=None if params.get("max_depth") in (None, 0, "0") else int(params.get("max_depth")),
+                min_samples_split=int(params.get("min_samples_split", 2)),
+                random_state=42,
             )
-        if model_key == "gradient_boosting_regressor":
+        if model_name == "Gradient Boosting":
             return GradientBoostingRegressor(
-                n_estimators=params.get("n_estimators", 150),
-                learning_rate=params.get("learning_rate", 0.1),
-                random_state=random_state,
+                n_estimators=int(params.get("n_estimators", 150)),
+                learning_rate=float(params.get("learning_rate", 0.1)),
+                random_state=42,
             )
-        if model_key == "knn_regressor":
-            return KNeighborsRegressor(
-                n_neighbors=params.get("n_neighbors", 5),
-                weights=params.get("weights", "uniform"),
-            )
-        if model_key == "svr":
-            return SVR(
-                C=params.get("C", 1.0),
-                kernel=params.get("kernel", "rbf"),
-            )
-    raise ValueError(f"Unsupported model: {model_key}")
+        if model_name == "KNN":
+            return KNeighborsRegressor(n_neighbors=int(params.get("n_neighbors", 5)))
+        if model_name == "SVR":
+            return SVR(C=float(params.get("C", 1.0)), kernel=params.get("kernel", "rbf"))
+    raise ValueError(f"Unsupported model selection: task={task}, model={model_name}")
 
 
-def prepare_training_matrices(df: pd.DataFrame, target_col: str) -> Tuple[pd.DataFrame, pd.Series]:
-    work_df = df.copy()
-    work_df = work_df.dropna(subset=[target_col])
-    y = work_df[target_col]
-    X = work_df.drop(columns=[target_col])
 
-    X = pd.get_dummies(X, dummy_na=True)
-    X = X.replace([np.inf, -np.inf], np.nan)
-    X = X.loc[:, X.nunique(dropna=False) > 1]
-    X = pd.DataFrame(SimpleImputer(strategy="median").fit_transform(X), columns=X.columns, index=work_df.index)
+def build_preprocessor(X: pd.DataFrame):
+    numeric_features = X.select_dtypes(include="number").columns.tolist()
+    categorical_features = X.select_dtypes(exclude="number").columns.tolist()
 
-    return X, y
-
-
-def fit_and_evaluate(
-    df: pd.DataFrame,
-    target_col: str,
-    problem_type: str,
-    model_key: str,
-    params: dict,
-    test_size: float,
-    random_state: int,
-    use_cv: bool,
-    cv_folds: int,
-):
-    X, y = prepare_training_matrices(df, target_col)
-
-    label_encoder = None
-    y_for_model = y.copy()
-    if problem_type == "classification" and (str(y.dtype) == "object" or str(y.dtype).startswith("category")):
-        label_encoder = LabelEncoder()
-        y_for_model = pd.Series(label_encoder.fit_transform(y.astype(str)), index=y.index)
-
-    stratify_target = y_for_model if problem_type == "classification" and pd.Series(y_for_model).nunique() > 1 else None
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y_for_model,
-        test_size=test_size,
-        random_state=random_state,
-        stratify=stratify_target,
+    numeric_transformer = Pipeline(
+        steps=[("imputer", SimpleImputer(strategy="median")), ("scaler", StandardScaler())]
+    )
+    categorical_transformer = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("encoder", OneHotEncoder(handle_unknown="ignore")),
+        ]
     )
 
-    model = build_model(problem_type, model_key, params, random_state=random_state)
-    model.fit(X_train, y_train)
-    preds = model.predict(X_test)
+    return ColumnTransformer(
+        transformers=[
+            ("num", numeric_transformer, numeric_features),
+            ("cat", categorical_transformer, categorical_features),
+        ]
+    )
 
-    if problem_type == "classification":
-        metrics = classification_metrics(y_test, preds)
-        probas = _predict_proba_or_score(model, X_test)
-        if probas is not None and len(pd.Series(y_test).unique()) == 2:
-            metrics["roc_auc"] = roc_auc_score(y_test, probas)
-        details = {
-            "confusion_matrix": confusion_matrix(y_test, preds).tolist(),
-            "classes": _classes_for_display(label_encoder, y_for_model),
-        }
+
+
+def _feature_names(preprocessor: ColumnTransformer, original_columns: list[str]) -> list[str]:
+    names: list[str] = []
+    try:
+        names = list(preprocessor.get_feature_names_out())
+    except Exception:
+        names = original_columns
+    return names
+
+
+
+def _importance_df(model: Any, preprocessor: ColumnTransformer, original_columns: list[str]) -> pd.DataFrame | None:
+    names = _feature_names(preprocessor, original_columns)
+    if hasattr(model, "feature_importances_"):
+        values = model.feature_importances_
+    elif hasattr(model, "coef_"):
+        coef = model.coef_
+        values = np.ravel(coef if coef.ndim == 1 else np.mean(np.abs(coef), axis=0))
     else:
-        metrics = regression_metrics(y_test, preds)
-        probas = None
-        details = {}
+        return None
 
-    cv_scores = None
-    if use_cv:
-        scoring = "accuracy" if problem_type == "classification" else "r2"
-        cv_scores = cross_val_score(model, X, y_for_model, cv=cv_folds, scoring=scoring)
+    if len(names) != len(values):
+        min_len = min(len(names), len(values))
+        names = names[:min_len]
+        values = values[:min_len]
 
-    feature_importance = get_feature_importance(model, X.columns.tolist())
+    imp = pd.DataFrame({"feature": names, "importance": values})
+    imp["importance"] = imp["importance"].abs()
+    imp = imp.sort_values("importance", ascending=False).reset_index(drop=True)
+    return imp
 
-    result = {
-        "model": model,
-        "X_test": X_test,
-        "y_test": y_test,
-        "predictions": preds,
-        "metrics": metrics,
-        "details": details,
-        "feature_importance": feature_importance,
-        "cv_scores": cv_scores,
-        "encoded": label_encoder is not None,
-        "label_encoder": label_encoder,
-    }
-    return result
+
+
+def train_model(
+    df: pd.DataFrame,
+    target_col: str,
+    task: str,
+    model_name: str,
+    params: Dict[str, Any],
+    test_size: float = 0.2,
+) -> TrainResult:
+    if target_col not in df.columns:
+        raise ValueError("Selected target column was not found in the dataframe.")
+
+    clean_df = df.dropna(subset=[target_col]).copy()
+    X = clean_df.drop(columns=[target_col])
+    y = clean_df[target_col]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=test_size,
+        random_state=42,
+        stratify=y if task == "classification" and y.nunique() > 1 else None,
+    )
+
+    preprocessor = build_preprocessor(X)
+    estimator = build_model(task, model_name, params)
+    pipe = Pipeline(steps=[("preprocessor", preprocessor), ("model", estimator)])
+    pipe.fit(X_train, y_train)
+
+    preds = pipe.predict(X_test)
+    metrics: Dict[str, float] = {}
+    confusion_df = None
+
+    if task == "classification":
+        metrics = {
+            "accuracy": round(float(accuracy_score(y_test, preds)), 4),
+            "precision_weighted": round(float(precision_score(y_test, preds, average="weighted", zero_division=0)), 4),
+            "recall_weighted": round(float(recall_score(y_test, preds, average="weighted", zero_division=0)), 4),
+            "f1_weighted": round(float(f1_score(y_test, preds, average="weighted", zero_division=0)), 4),
+        }
+        labels = np.unique(np.concatenate([np.asarray(y_test), np.asarray(preds)]))
+        cm = confusion_matrix(y_test, preds, labels=labels)
+        confusion_df = pd.DataFrame(cm, index=[f"true_{x}" for x in labels], columns=[f"pred_{x}" for x in labels])
+    else:
+        rmse = mean_squared_error(y_test, preds) ** 0.5
+        metrics = {
+            "r2": round(float(r2_score(y_test, preds)), 4),
+            "mae": round(float(mean_absolute_error(y_test, preds)), 4),
+            "rmse": round(float(rmse), 4),
+        }
+
+    importance = _importance_df(pipe.named_steps["model"], pipe.named_steps["preprocessor"], list(X.columns))
+    pred_df = pd.DataFrame({"actual": y_test.reset_index(drop=True), "prediction": pd.Series(preds).reset_index(drop=True)})
+
+    return TrainResult(
+        model=pipe,
+        metrics=metrics,
+        predictions=pred_df,
+        feature_importance=importance,
+        confusion=confusion_df,
+    )
+
 
 
 def compare_models(
     df: pd.DataFrame,
     target_col: str,
-    problem_type: str,
-    test_size: float,
-    random_state: int,
+    task: str,
+    test_size: float = 0.2,
 ) -> pd.DataFrame:
-    X, y = prepare_training_matrices(df, target_col)
-    if problem_type == "classification" and (str(y.dtype) == "object" or str(y.dtype).startswith("category")):
-        y = pd.Series(LabelEncoder().fit_transform(y.astype(str)), index=y.index)
+    if task == "classification":
+        candidates = [
+            ("Logistic Regression", {}),
+            ("Random Forest", {"n_estimators": 200}),
+            ("Gradient Boosting", {"n_estimators": 150, "learning_rate": 0.1}),
+            ("KNN", {"n_neighbors": 5}),
+        ]
+        score_name = "accuracy"
+    else:
+        candidates = [
+            ("Linear Regression", {}),
+            ("Random Forest", {"n_estimators": 200}),
+            ("Gradient Boosting", {"n_estimators": 150, "learning_rate": 0.1}),
+            ("KNN", {"n_neighbors": 5}),
+        ]
+        score_name = "r2"
 
-    stratify_target = y if problem_type == "classification" and y.nunique() > 1 else None
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=test_size,
-        random_state=random_state,
-        stratify=stratify_target,
-    )
+    rows = []
+    for name, params in candidates:
+        try:
+            result = train_model(df, target_col, task, name, params, test_size)
+            row = {"model": name, **result.metrics}
+            rows.append(row)
+        except Exception as exc:
+            rows.append({"model": name, "error": str(exc)})
 
-    rows: List[dict] = []
-    for model_name, model_key in get_model_options(problem_type).items():
-        model = build_model(problem_type, model_key, params={}, random_state=random_state)
-        model.fit(X_train, y_train)
-        preds = model.predict(X_test)
-        if problem_type == "classification":
-            metrics = classification_metrics(y_test, preds)
-            score = metrics["f1_score"]
-        else:
-            metrics = regression_metrics(y_test, preds)
-            score = metrics["r2_score"]
-        row = {"model": model_name, **{k: round(float(v), 4) for k, v in metrics.items()}, "score": round(float(score), 4)}
-        rows.append(row)
-
-    leaderboard = pd.DataFrame(rows).sort_values("score", ascending=False).reset_index(drop=True)
-    return leaderboard
-
-
-def classification_metrics(y_true, y_pred) -> dict:
-    average = "weighted"
-    return {
-        "accuracy": accuracy_score(y_true, y_pred),
-        "precision": precision_score(y_true, y_pred, average=average, zero_division=0),
-        "recall": recall_score(y_true, y_pred, average=average, zero_division=0),
-        "f1_score": f1_score(y_true, y_pred, average=average, zero_division=0),
-    }
+    leaderboard = pd.DataFrame(rows)
+    if score_name in leaderboard.columns:
+        leaderboard = leaderboard.sort_values(score_name, ascending=False, na_position="last")
+    return leaderboard.reset_index(drop=True)
 
 
-def regression_metrics(y_true, y_pred) -> dict:
-    rmse = mean_squared_error(y_true, y_pred) ** 0.5
-    return {
-        "r2_score": r2_score(y_true, y_pred),
-        "mae": mean_absolute_error(y_true, y_pred),
-        "rmse": rmse,
-    }
 
+def detect_anomalies(df: pd.DataFrame, contamination: float = 0.05) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    numeric = df.select_dtypes(include="number").copy()
+    if numeric.empty:
+        raise ValueError("Anomaly detection requires at least one numeric column.")
 
-def get_feature_importance(model, feature_names: List[str]) -> pd.DataFrame:
-    values = None
-    if hasattr(model, "feature_importances_"):
-        values = model.feature_importances_
-    elif hasattr(model, "coef_"):
-        coef = np.asarray(model.coef_)
-        values = np.abs(coef[0]) if coef.ndim > 1 else np.abs(coef)
+    numeric = numeric.fillna(numeric.median(numeric_only=True))
+    detector = IsolationForest(contamination=contamination, random_state=42)
+    preds = detector.fit_predict(numeric)
+    scores = detector.decision_function(numeric)
 
-    if values is None:
-        return pd.DataFrame(columns=["feature", "importance"])
+    output = df.copy()
+    output["anomaly_flag"] = np.where(preds == -1, "anomaly", "normal")
+    output["anomaly_score"] = scores
 
-    importance_df = pd.DataFrame({"feature": feature_names, "importance": values})
-    return importance_df.sort_values("importance", ascending=False).head(20).reset_index(drop=True)
-
-
-def _predict_proba_or_score(model, X_test):
-    if hasattr(model, "predict_proba"):
-        proba = model.predict_proba(X_test)
-        if proba.ndim == 2 and proba.shape[1] == 2:
-            return proba[:, 1]
-    if hasattr(model, "decision_function"):
-        scores = model.decision_function(X_test)
-        if np.asarray(scores).ndim == 1:
-            return scores
-    return None
-
-
-def _classes_for_display(label_encoder, y):
-    if label_encoder is not None:
-        return label_encoder.classes_.tolist()
-    return sorted(pd.Series(y).astype(str).unique().tolist())
+    summary = output["anomaly_flag"].value_counts().rename_axis("class").reset_index(name="count")
+    return output, summary
