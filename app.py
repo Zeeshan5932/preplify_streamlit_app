@@ -90,44 +90,44 @@ def parameter_controls(task: str, model_name: str) -> dict:
 
     if task == "classification":
         if model_name == "Logistic Regression":
-            params["C"] = st.sidebar.slider("C", 0.01, 10.0, 1.0, 0.01)
-            params["max_iter"] = st.sidebar.slider("max_iter", 100, 2000, 500, 50)
+            params["C"] = st.slider("C", 0.01, 10.0, 1.0, 0.01)
+            params["max_iter"] = st.slider("max_iter", 100, 2000, 500, 50)
 
         elif model_name == "Random Forest":
-            params["n_estimators"] = st.sidebar.slider("n_estimators", 50, 600, 200, 10)
-            params["max_depth"] = st.sidebar.slider("max_depth (0 = None)", 0, 40, 0, 1)
-            params["min_samples_split"] = st.sidebar.slider("min_samples_split", 2, 20, 2, 1)
+            params["n_estimators"] = st.slider("n_estimators", 50, 600, 200, 10)
+            params["max_depth"] = st.slider("max_depth (0 = None)", 0, 40, 0, 1)
+            params["min_samples_split"] = st.slider("min_samples_split", 2, 20, 2, 1)
 
         elif model_name == "Gradient Boosting":
-            params["n_estimators"] = st.sidebar.slider("n_estimators", 50, 600, 150, 10)
-            params["learning_rate"] = st.sidebar.slider("learning_rate", 0.01, 1.0, 0.1, 0.01)
+            params["n_estimators"] = st.slider("n_estimators", 50, 600, 150, 10)
+            params["learning_rate"] = st.slider("learning_rate", 0.01, 1.0, 0.1, 0.01)
 
         elif model_name == "KNN":
-            params["n_neighbors"] = st.sidebar.slider("n_neighbors", 1, 30, 5, 1)
+            params["n_neighbors"] = st.slider("n_neighbors", 1, 30, 5, 1)
 
         elif model_name == "SVM":
-            params["C"] = st.sidebar.slider("C", 0.01, 10.0, 1.0, 0.01)
-            params["kernel"] = st.sidebar.selectbox("kernel", ["rbf", "linear", "poly", "sigmoid"])
+            params["C"] = st.slider("C", 0.01, 10.0, 1.0, 0.01)
+            params["kernel"] = st.selectbox("kernel", ["rbf", "linear", "poly", "sigmoid"])
 
     else:
         if model_name == "Linear Regression":
-            st.sidebar.caption("Linear Regression has no tuning parameters in this app.")
+            st.caption("Linear Regression has no tuning parameters in this app.")
 
         elif model_name == "Random Forest":
-            params["n_estimators"] = st.sidebar.slider("n_estimators", 50, 600, 200, 10)
-            params["max_depth"] = st.sidebar.slider("max_depth (0 = None)", 0, 40, 0, 1)
-            params["min_samples_split"] = st.sidebar.slider("min_samples_split", 2, 20, 2, 1)
+            params["n_estimators"] = st.slider("n_estimators", 50, 600, 200, 10)
+            params["max_depth"] = st.slider("max_depth (0 = None)", 0, 40, 0, 1)
+            params["min_samples_split"] = st.slider("min_samples_split", 2, 20, 2, 1)
 
         elif model_name == "Gradient Boosting":
-            params["n_estimators"] = st.sidebar.slider("n_estimators", 50, 600, 150, 10)
-            params["learning_rate"] = st.sidebar.slider("learning_rate", 0.01, 1.0, 0.1, 0.01)
+            params["n_estimators"] = st.slider("n_estimators", 50, 600, 150, 10)
+            params["learning_rate"] = st.slider("learning_rate", 0.01, 1.0, 0.1, 0.01)
 
         elif model_name == "KNN":
-            params["n_neighbors"] = st.sidebar.slider("n_neighbors", 1, 30, 5, 1)
+            params["n_neighbors"] = st.slider("n_neighbors", 1, 30, 5, 1)
 
         elif model_name == "SVR":
-            params["C"] = st.sidebar.slider("C", 0.01, 10.0, 1.0, 0.01)
-            params["kernel"] = st.sidebar.selectbox("kernel", ["rbf", "linear", "poly", "sigmoid"])
+            params["C"] = st.slider("C", 0.01, 10.0, 1.0, 0.01)
+            params["kernel"] = st.selectbox("kernel", ["rbf", "linear", "poly", "sigmoid"])
 
     return params
 
@@ -225,15 +225,129 @@ def main() -> None:
     st.markdown(
         """
         <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;700&display=swap');
+
+        :root {
+            --brand-deep: #0b132b;
+            --brand-mid: #1c2541;
+            --brand-accent: #ff7a18;
+            --brand-accent-2: #ffd166;
+            --card: #ffffff;
+            --ink: #111827;
+            --muted: #5b6475;
+            --border: #e7e9ef;
+        }
+
+        .stApp {
+            font-family: 'DM Sans', sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(1200px 500px at 100% -100px, rgba(255, 122, 24, 0.14), transparent 60%),
+                radial-gradient(900px 480px at 0% -120px, rgba(255, 209, 102, 0.18), transparent 60%),
+                linear-gradient(180deg, #f8fafc 0%, #f4f7fb 100%);
+        }
+
+        h1, h2, h3, .stTabs [data-baseweb="tab"] {
+            font-family: 'Space Grotesk', sans-serif;
+            letter-spacing: -0.01em;
+        }
+
         .hero-box {
-            padding: 18px;
-            border-radius: 18px;
-            background: linear-gradient(135deg,#0f172a,#1d4ed8);
+            padding: 22px;
+            border-radius: 20px;
+            background: linear-gradient(132deg, var(--brand-deep), var(--brand-mid));
             color: white;
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 16px 36px rgba(11, 19, 43, 0.24);
         }
         .hero-sub {
-            color: #dbeafe;
+            color: #e3e8f8;
             margin-top: 8px;
+            max-width: 900px;
+            line-height: 1.55;
+        }
+        .hero-strip {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 14px;
+        }
+        .hero-pill {
+            border: 1px solid rgba(255,255,255,0.22);
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            color: #fff;
+            background: rgba(255,255,255,0.08);
+        }
+
+        .block-container {
+            padding-top: 1.2rem;
+        }
+
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 8px;
+            background: #eef2f8;
+            border-radius: 14px;
+            padding: 6px;
+            border: 1px solid #dbe3ef;
+        }
+
+        .stTabs [data-baseweb="tab"] {
+            border-radius: 10px;
+            padding: 8px 14px;
+            color: #35425d;
+            font-weight: 600;
+            transition: all 120ms ease;
+        }
+
+        .stTabs [aria-selected="true"] {
+            background: #ffffff;
+            color: #0b132b;
+            box-shadow: 0 2px 12px rgba(11, 19, 43, 0.1);
+        }
+
+        div[data-testid="stMetric"] {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 10px 12px;
+            box-shadow: 0 8px 18px rgba(23, 31, 56, 0.04);
+        }
+
+        div[data-testid="stForm"],
+        div[data-testid="stExpander"] {
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            background: #ffffff;
+        }
+
+        .stButton > button,
+        .stDownloadButton > button {
+            border-radius: 12px;
+            border: 1px solid #cfd8e8;
+            font-weight: 600;
+            transition: transform 120ms ease, box-shadow 120ms ease;
+        }
+
+        .stButton > button:hover,
+        .stDownloadButton > button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(17, 24, 39, 0.08);
+        }
+
+        @media (max-width: 900px) {
+            .hero-box {
+                padding: 16px;
+                border-radius: 16px;
+            }
+            .hero-sub {
+                font-size: 14px;
+            }
+            .stTabs [data-baseweb="tab"] {
+                padding: 7px 10px;
+                font-size: 12px;
+            }
         }
         </style>
         """,
@@ -246,6 +360,11 @@ def main() -> None:
             <h1 style="margin-bottom:6px;">🧠 Preplify AI BI Studio</h1>
             <div class="hero-sub">
                 Preprocess with Preplify, chat with your data using an LLM, and generate BI-style reports that feel like Tableau or Power BI.
+            </div>
+            <div class="hero-strip">
+                <span class="hero-pill">CSV to BI in minutes</span>
+                <span class="hero-pill">Groq-powered AI analyst</span>
+                <span class="hero-pill">ML and anomaly workflow</span>
             </div>
         </div>
         """,
@@ -510,37 +629,47 @@ def main() -> None:
 
     with model_tab:
         st.subheader("Train and compare models")
+        st.caption("Choose your dataset, target, task, and model directly in Model Lab.")
 
-        source_choice = st.radio(
-            "Training data source",
-            ["Original dataframe", "Processed dataframe"],
-            horizontal=True,
-        )
+        controls_top_left, controls_top_right = st.columns([1.2, 1])
+
+        with controls_top_left:
+            source_choice = st.radio(
+                "Training data source",
+                ["Original dataframe", "Processed dataframe"],
+                horizontal=True,
+            )
 
         train_df = pick_source_df(df, source_choice == "Processed dataframe")
 
         if train_df is None or train_df.empty:
             st.warning("No data available for training.")
         else:
-            target_col = st.selectbox("Target column", train_df.columns)
-            task_guess = infer_task_type(train_df[target_col])
-            task = st.selectbox("Task type", [task_guess, "classification", "regression"])
-            test_size = st.slider("Test size", 0.1, 0.4, 0.2, 0.05)
+            with controls_top_left:
+                target_col = st.selectbox("Target column", train_df.columns)
+                task_guess = infer_task_type(train_df[target_col])
+                task_options = [task_guess] + [t for t in ["classification", "regression"] if t != task_guess]
+                task = st.selectbox("Task type", task_options)
+                test_size = st.slider("Test size", 0.1, 0.4, 0.2, 0.05)
 
-            if task == "classification":
-                model_name_select = st.sidebar.selectbox(
-                    "Model",
-                    ["Logistic Regression", "Random Forest", "Gradient Boosting", "KNN", "SVM"],
-                    key="model_class",
-                )
-            else:
-                model_name_select = st.sidebar.selectbox(
-                    "Model",
-                    ["Linear Regression", "Random Forest", "Gradient Boosting", "KNN", "SVR"],
-                    key="model_reg",
-                )
+            with controls_top_right:
+                st.markdown("### Model Selection")
+                if task == "classification":
+                    model_name_select = st.selectbox(
+                        "Model",
+                        ["Logistic Regression", "Random Forest", "Gradient Boosting", "KNN", "SVM"],
+                        key="model_class",
+                    )
+                else:
+                    model_name_select = st.selectbox(
+                        "Model",
+                        ["Linear Regression", "Random Forest", "Gradient Boosting", "KNN", "SVR"],
+                        key="model_reg",
+                    )
+                st.info(f"Selected model: {model_name_select}")
 
-            params = parameter_controls(task, model_name_select)
+            with st.expander("Model Hyperparameters", expanded=True):
+                params = parameter_controls(task, model_name_select)
 
             c_left, c_right = st.columns(2)
 
