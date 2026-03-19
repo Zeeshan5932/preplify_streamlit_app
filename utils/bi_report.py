@@ -95,7 +95,11 @@ def chart_from_spec(df: pd.DataFrame, spec: Dict[str, Any]):
 
 
 
-def render_bi_dashboard(df: pd.DataFrame, spec: Dict[str, Any]):
+def render_bi_dashboard(
+    df: pd.DataFrame,
+    spec: Dict[str, Any],
+    key_prefix: str = "bi_dashboard",
+):
     st.markdown(
         """
         <style>
@@ -155,10 +159,14 @@ def render_bi_dashboard(df: pd.DataFrame, spec: Dict[str, Any]):
         for i in range(0, len(charts), 2):
             row = charts[i : i + 2]
             cols = st.columns(len(row))
-            for col, chart_spec in zip(cols, row):
+            for j, (col, chart_spec) in enumerate(zip(cols, row)):
                 with col:
                     fig = chart_from_spec(df, chart_spec)
                     if fig is not None:
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(
+                            fig,
+                            use_container_width=True,
+                            key=f"{key_prefix}_chart_{i + j}",
+                        )
                     else:
                         st.warning(f"Could not render chart: {chart_spec.get('title', 'Untitled')}")

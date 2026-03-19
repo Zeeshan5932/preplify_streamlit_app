@@ -170,19 +170,16 @@ def build_llm_sidebar() -> tuple:
 
         provider_choice = st.selectbox(
             "LLM Provider",
-            ["Auto (from env)", "Groq", "OpenAI", "Custom OpenAI-compatible"],
+            ["Auto (from env)", "Groq"],
             index=0,
         )
 
         default_groq_key = os.getenv("GROQ_API_KEY", "")
-        default_openai_key = os.getenv("OPENAI_API_KEY", "")
-        default_groq_base = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-        default_openai_base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        default_groq_base = os.getenv("GROQ_BASE_URL", "https://api.groq.com")
         default_model = (
             os.getenv("LLM_MODEL", "")
-            or os.getenv("OPENAI_MODEL", "")
             or os.getenv("GROQ_MODEL", "")
-            or "gpt-4.1-mini"
+            or "llama-3.3-70b-versatile"
         )
 
         selected_api_key = ""
@@ -200,19 +197,6 @@ def build_llm_sidebar() -> tuple:
                 "Groq model",
                 value=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
             )
-
-        elif provider_choice == "OpenAI":
-            selected_api_key = st.text_input("OPENAI_API_KEY", value=default_openai_key, type="password")
-            selected_base_url = st.text_input("OpenAI Base URL", value=default_openai_base)
-            selected_model = st.text_input(
-                "OpenAI model",
-                value=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
-            )
-
-        else:
-            selected_api_key = st.text_input("Custom API Key", value="", type="password")
-            selected_base_url = st.text_input("Custom Base URL", value="")
-            selected_model = st.text_input("Custom model", value=default_model or "gpt-4.1-mini")
 
         llm_cfg = resolve_llm_config(
             provider_choice=provider_choice,
@@ -391,7 +375,11 @@ def main() -> None:
                         st.error(f"AI BI report generation failed: {exc}")
 
             if st.session_state.ai_report_spec is not None:
-                render_bi_dashboard(report_df, st.session_state.ai_report_spec)
+                render_bi_dashboard(
+                    report_df,
+                    st.session_state.ai_report_spec,
+                    key_prefix="report_studio_bi",
+                )
                 with st.expander("Raw AI response / JSON"):
                     st.code(
                         st.session_state.ai_report_raw or json.dumps(st.session_state.ai_report_spec, indent=2),
@@ -659,7 +647,11 @@ def main() -> None:
             ai_df = pick_source_df(df, use_processed_dash)
 
             if st.session_state.ai_report_spec is not None:
-                render_bi_dashboard(ai_df, st.session_state.ai_report_spec)
+                render_bi_dashboard(
+                    ai_df,
+                    st.session_state.ai_report_spec,
+                    key_prefix="ai_tab_bi",
+                )
             else:
                 st.info("Ask the AI to make a report, dashboard, Power BI report, or Tableau-style report.")
 

@@ -5,5 +5,4 @@ numpy>=1.24.0
 scikit-learn>=1.4.0
 plotly>=5.20.0
 groq
-openai
 python-dotenv
