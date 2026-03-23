@@ -48,8 +48,8 @@ from utils.visuals import (
 load_dotenv()
 
 st.set_page_config(
-    page_title="Preplify AI BI Studio",
-    page_icon="🧠",
+    page_title="DataCanvas Nexus",
+    page_icon="✨",
     layout="wide",
 )
 
@@ -69,6 +69,8 @@ def set_state_defaults() -> None:
         "ai_report_spec": None,
         "ai_report_raw": None,
         "chat_history": [],
+        "ai_prompt_draft": "",
+        "clear_ai_prompt": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -158,15 +160,50 @@ def maybe_generate_bi_from_prompt(df: pd.DataFrame, prompt: str, llm_cfg: dict) 
     return False
 
 
+def answer_ai_prompt(df: pd.DataFrame, prompt: str, llm_cfg: dict) -> str:
+    if not llm_cfg["api_key"]:
+        return "Add your API key in the sidebar or select Auto (from env)."
+
+    try:
+        generated = maybe_generate_bi_from_prompt(df, prompt, llm_cfg)
+        if generated:
+            return (
+                "I created a BI-style dashboard report below. "
+                "Open the 'Generated BI Dashboard' subtab to view it."
+            )
+
+        return ask_dataset_question(
+            df=df,
+            question=prompt,
+            provider=llm_cfg["provider"],
+            model_name=llm_cfg["model"],
+            api_key=llm_cfg["api_key"],
+            base_url=llm_cfg["base_url"],
+        )
+
+    except Exception as exc:
+        return f"AI request failed: {exc}"
+
+
 def build_llm_sidebar() -> tuple:
     with st.sidebar:
+        st.markdown(
+            """
+            <div class="sidebar-brand">
+                <div class="sidebar-brand-title">DataCanvas Nexus</div>
+                <div class="sidebar-brand-sub">AI analytics cockpit</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         st.header("Workspace")
         st.info(status_message())
 
         uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
         st.markdown("---")
 
-        st.subheader("LLM Settings")
+        st.subheader("AI Engine Settings")
 
         provider_choice = st.selectbox(
             "LLM Provider",
@@ -225,60 +262,124 @@ def main() -> None:
     st.markdown(
         """
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap');
 
         :root {
-            --brand-deep: #0b132b;
-            --brand-mid: #1c2541;
-            --brand-accent: #ff7a18;
-            --brand-accent-2: #ffd166;
+            --brand-deep: #0f172a;
+            --brand-mid: #1d3557;
+            --brand-accent: #ff6b35;
+            --brand-accent-2: #22c55e;
+            --brand-accent-3: #06b6d4;
             --card: #ffffff;
-            --ink: #111827;
-            --muted: #5b6475;
-            --border: #e7e9ef;
+            --ink: #0b1320;
+            --muted: #4b5563;
+            --border: #dfe6f2;
+            --sidebar-bg: #ffffff;
         }
 
         .stApp {
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Manrope', sans-serif;
             color: var(--ink);
             background:
-                radial-gradient(1200px 500px at 100% -100px, rgba(255, 122, 24, 0.14), transparent 60%),
-                radial-gradient(900px 480px at 0% -120px, rgba(255, 209, 102, 0.18), transparent 60%),
-                linear-gradient(180deg, #f8fafc 0%, #f4f7fb 100%);
+                radial-gradient(1200px 520px at 110% -100px, rgba(34, 197, 94, 0.16), transparent 58%),
+                radial-gradient(980px 460px at -5% -140px, rgba(6, 182, 212, 0.2), transparent 60%),
+                linear-gradient(180deg, #f8fbff 0%, #eef6f9 100%);
+        }
+
+        section[data-testid="stSidebar"] {
+            background: var(--sidebar-bg) !important;
+            border-right: 1px solid #e5edf7;
+        }
+
+        section[data-testid="stSidebar"] * {
+            color: #111827 !important;
+        }
+
+        section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
+            background: #f8fafc !important;
+            border: 1px solid #dbe3ef !important;
+            border-radius: 12px;
+        }
+
+        section[data-testid="stSidebar"] [data-testid="stAlert"] {
+            background: #eef2ff !important;
+            border: 1px solid #c7d2fe !important;
+            border-radius: 12px;
         }
 
         h1, h2, h3, .stTabs [data-baseweb="tab"] {
-            font-family: 'Space Grotesk', sans-serif;
+            font-family: 'Plus Jakarta Sans', sans-serif;
             letter-spacing: -0.01em;
         }
 
+        .sidebar-brand {
+            border: 1px solid #dbeafe;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);
+            padding: 12px 14px;
+            margin-bottom: 14px;
+        }
+
+        .sidebar-brand-title {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 800;
+            color: #0f172a;
+            font-size: 15px;
+        }
+
+        .sidebar-brand-sub {
+            color: #334155;
+            font-size: 12px;
+            margin-top: 2px;
+        }
+
         .hero-box {
-            padding: 22px;
-            border-radius: 20px;
-            background: linear-gradient(132deg, var(--brand-deep), var(--brand-mid));
+            padding: 26px;
+            border-radius: 24px;
+            background:
+                radial-gradient(500px 180px at 95% 0%, rgba(255,255,255,0.2), transparent 70%),
+                linear-gradient(128deg, var(--brand-deep), var(--brand-mid));
             color: white;
             border: 1px solid rgba(255,255,255,0.12);
-            box-shadow: 0 16px 36px rgba(11, 19, 43, 0.24);
+            box-shadow: 0 18px 44px rgba(15, 23, 42, 0.26);
+            animation: hero-enter 550ms ease-out;
         }
+
         .hero-sub {
-            color: #e3e8f8;
+            color: #e2ebff;
             margin-top: 8px;
             max-width: 900px;
             line-height: 1.55;
         }
+
         .hero-strip {
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
             margin-top: 14px;
         }
+
         .hero-pill {
             border: 1px solid rgba(255,255,255,0.22);
-            padding: 6px 10px;
+            padding: 7px 11px;
             border-radius: 999px;
             font-size: 12px;
             color: #fff;
             background: rgba(255,255,255,0.08);
+        }
+
+        .hero-kicker {
+            display: inline-block;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #dbeafe;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(219, 234, 254, 0.25);
+            background: rgba(219, 234, 254, 0.1);
         }
 
         .block-container {
@@ -287,10 +388,10 @@ def main() -> None:
 
         .stTabs [data-baseweb="tab-list"] {
             gap: 8px;
-            background: #eef2f8;
+            background: #eaf4f8;
             border-radius: 14px;
             padding: 6px;
-            border: 1px solid #dbe3ef;
+            border: 1px solid #d4e6ef;
         }
 
         .stTabs [data-baseweb="tab"] {
@@ -303,16 +404,33 @@ def main() -> None:
 
         .stTabs [aria-selected="true"] {
             background: #ffffff;
-            color: #0b132b;
-            box-shadow: 0 2px 12px rgba(11, 19, 43, 0.1);
+            color: #0f172a;
+            box-shadow: 0 2px 14px rgba(2, 6, 23, 0.1);
+        }
+
+        .stTabs [data-baseweb="tab-panel"] {
+            color: var(--ink);
         }
 
         div[data-testid="stMetric"] {
             background: var(--card);
             border: 1px solid var(--border);
             border-radius: 14px;
-            padding: 10px 12px;
-            box-shadow: 0 8px 18px rgba(23, 31, 56, 0.04);
+            padding: 12px 13px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        div[data-testid="stMetricLabel"] p {
+            color: #5b6475 !important;
+            font-weight: 600;
+        }
+
+        div[data-testid="stMetricValue"] {
+            color: #0f172a !important;
+        }
+
+        div[data-testid="stMetricDelta"] {
+            color: #1e293b !important;
         }
 
         div[data-testid="stForm"],
@@ -322,23 +440,141 @@ def main() -> None:
             background: #ffffff;
         }
 
+        /* Ensure widget labels and option text stay readable on light surfaces */
+        label[data-testid="stWidgetLabel"] p,
+        div[role="radiogroup"] label,
+        div[role="radiogroup"] label p,
+        div[role="radiogroup"] label span,
+        div[data-baseweb="checkbox"] label,
+        div[data-baseweb="checkbox"] span,
+        div[data-baseweb="select"] *,
+        div[data-baseweb="input"] input,
+        textarea,
+        .stMarkdown,
+        .stCaption,
+        .stText {
+            color: var(--ink) !important;
+        }
+
+        .stAlert p,
+        .stInfo p,
+        .stWarning p,
+        .stSuccess p,
+        .stError p {
+            color: #111827 !important;
+        }
+
+        /* Input surface + text contrast fix (main area + sidebar + chat input) */
+        div[data-baseweb="input"] > div,
+        div[data-baseweb="base-input"] > div,
+        div[data-baseweb="select"] > div,
+        textarea,
+        input {
+            background: #ffffff !important;
+            color: #111827 !important;
+            border: 1px solid #cfd8e8 !important;
+        }
+
+        div[data-baseweb="input"] input,
+        div[data-baseweb="select"] input,
+        textarea,
+        input {
+            color: #111827 !important;
+            -webkit-text-fill-color: #111827 !important;
+        }
+
+        div[data-testid="stTextArea"] textarea {
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border: 1px solid #b8cbe6 !important;
+            border-radius: 10px !important;
+        }
+
+        div[data-testid="stTextArea"] textarea:focus {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 1px #3b82f6 !important;
+            outline: none !important;
+        }
+
+        input::placeholder,
+        textarea::placeholder {
+            color: #6b7280 !important;
+            opacity: 1 !important;
+        }
+
+        section[data-testid="stSidebar"] div[data-baseweb="input"] > div,
+        section[data-testid="stSidebar"] div[data-baseweb="select"] > div,
+        section[data-testid="stSidebar"] textarea,
+        section[data-testid="stSidebar"] input {
+            background: #ffffff !important;
+            color: #111827 !important;
+            border: 1px solid #94a3b8 !important;
+        }
+
+        div[data-testid="stForm"] {
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+        }
+
+        div[data-testid="stExpander"] details summary,
+        div[data-testid="stExpander"] details summary p {
+            color: #0f172a !important;
+            font-weight: 600;
+        }
+
+        .stRadio > div {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 12px;
+        }
+
         .stButton > button,
         .stDownloadButton > button {
             border-radius: 12px;
-            border: 1px solid #cfd8e8;
+            border: 1px solid #cfddee;
             font-weight: 600;
-            transition: transform 120ms ease, box-shadow 120ms ease;
+            transition: transform 130ms ease, box-shadow 130ms ease, border-color 130ms ease;
+            background: #f8fbff;
+            color: #0f172a !important;
         }
 
         .stButton > button:hover,
         .stDownloadButton > button:hover {
             transform: translateY(-1px);
-            box-shadow: 0 8px 18px rgba(17, 24, 39, 0.08);
+            border-color: #9fb6d1;
+            box-shadow: 0 9px 20px rgba(15, 23, 42, 0.11);
+        }
+
+        .stButton > button[kind="primary"] {
+            background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
+            color: #ffffff !important;
+            border: none;
+        }
+
+        .stButton > button[kind="primary"]:hover {
+            box-shadow: 0 10px 24px rgba(37, 99, 235, 0.34);
+        }
+
+        .stButton > button[kind="secondary"] {
+            background: #e9f1fb !important;
+            color: #0f172a !important;
+            border: 1px solid #bfd2eb !important;
+        }
+
+        @keyframes hero-enter {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         @media (max-width: 900px) {
             .hero-box {
-                padding: 16px;
+                padding: 17px;
                 border-radius: 16px;
             }
             .hero-sub {
@@ -357,14 +593,15 @@ def main() -> None:
     st.markdown(
         """
         <div class="hero-box">
-            <h1 style="margin-bottom:6px;">🧠 Preplify AI BI Studio</h1>
+            <span class="hero-kicker">Next-gen analytics workspace</span>
+            <h1 style="margin:10px 0 6px 0;">✨ DataCanvas Nexus</h1>
             <div class="hero-sub">
-                Preprocess with Preplify, chat with your data using an LLM, and generate BI-style reports that feel like Tableau or Power BI.
+                A bold data studio for teams that want clean prep, visual intelligence, and AI-powered analysis in one experience.
             </div>
             <div class="hero-strip">
-                <span class="hero-pill">CSV to BI in minutes</span>
-                <span class="hero-pill">Groq-powered AI analyst</span>
-                <span class="hero-pill">ML and anomaly workflow</span>
+                <span class="hero-pill">From CSV to decisions</span>
+                <span class="hero-pill">AI Analyst that understands your dataset</span>
+                <span class="hero-pill">Built-in ML + anomaly intelligence</span>
             </div>
         </div>
         """,
@@ -384,18 +621,19 @@ def main() -> None:
 
     overview_tab, report_tab, visual_tab, prep_tab, model_tab, ai_tab, anomaly_tab, export_tab = st.tabs(
         [
-            "Overview",
-            "Report Studio",
-            "Visualization Lab",
-            "Preprocessing Studio",
-            "Model Lab",
+            "Pulse Overview",
+            "Insight Reports",
+            "Visual Atlas",
+            "Data Refinery",
+            "Model Forge",
             "AI Analyst",
-            "Anomaly Lab",
-            "Export Center",
+            "Outlier Radar",
+            "Export Vault",
         ]
     )
 
     with overview_tab:
+        st.caption("Your dataset pulse at a glance: shape, health, and quick structural signals.")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Rows", profile["rows"])
         c2.metric("Columns", profile["columns"])
@@ -415,6 +653,7 @@ def main() -> None:
             st.dataframe(column_summary(df), use_container_width=True, hide_index=True)
 
     with report_tab:
+        st.caption("Create boardroom-ready summaries or AI-crafted dashboard specs in one workspace.")
         smart_subtab, ai_bi_subtab = st.tabs(["Smart Report", "AI BI Report"])
 
         with smart_subtab:
@@ -509,6 +748,7 @@ def main() -> None:
 
     with visual_tab:
         st.subheader("2D + 3D visualization workspace")
+        st.caption("Explore patterns, segments, and relationships with interactive visual storytelling.")
 
         use_processed = st.toggle("Use processed dataframe for visualizations", value=False)
         vis_df = pick_source_df(df, use_processed)
@@ -580,6 +820,7 @@ def main() -> None:
 
     with prep_tab:
         st.subheader("Preprocess your data")
+        st.caption("Refine raw data into model-ready inputs using automatic or custom pipelines.")
 
         prep_mode = st.radio("Mode", ["Preplify auto_prep", "Custom pipeline"], horizontal=True)
 
@@ -629,7 +870,7 @@ def main() -> None:
 
     with model_tab:
         st.subheader("Train and compare models")
-        st.caption("Choose your dataset, target, task, and model directly in Model Lab.")
+        st.caption("Choose source data, set target/task, tune parameters, and compare model performance.")
 
         controls_top_left, controls_top_right = st.columns([1.2, 1])
 
@@ -718,55 +959,58 @@ def main() -> None:
 
         with chat_subtab:
             st.subheader("Ask the AI analyst")
+            st.caption("Type a question below to start the analysis.")
 
             use_processed_chat = st.toggle("Use processed dataframe in chat", value=False)
             chat_df = pick_source_df(df, use_processed_chat)
+
+            if st.session_state.clear_ai_prompt:
+                st.session_state.ai_prompt_draft = ""
+                st.session_state.clear_ai_prompt = False
 
             for item in st.session_state.chat_history:
                 with st.chat_message(item["role"]):
                     st.markdown(item["content"])
 
-            prompt = st.chat_input(
-                "Ask about the dataset, charts, preprocessing, or say 'make a report like Power BI'."
+            st.text_area(
+                "Your question",
+                key="ai_prompt_draft",
+                height=90,
+                placeholder="Type your own question here. Example: What are the top 3 columns hurting data quality?",
             )
+            ask_col, clear_col = st.columns([1, 1])
+            ask_now = ask_col.button("Ask AI", type="primary", use_container_width=True)
+            clear_chat = clear_col.button("Clear chat", use_container_width=True)
 
-            if prompt:
-                st.session_state.chat_history.append({"role": "user", "content": prompt})
+            if clear_chat:
+                st.session_state.chat_history = []
+                st.session_state.clear_ai_prompt = True
+                st.rerun()
 
-                with st.chat_message("user"):
-                    st.markdown(prompt)
+            if ask_now:
+                cleaned_prompt = st.session_state.ai_prompt_draft.strip()
 
-                if not llm_cfg["api_key"]:
-                    answer = "Add your API key in the sidebar or select Auto (from env)."
+                if not cleaned_prompt:
+                    st.warning("Please type your question before clicking Ask AI.")
                 else:
-                    try:
-                        generated = maybe_generate_bi_from_prompt(chat_df, prompt, llm_cfg)
+                    st.session_state.chat_history.append({"role": "user", "content": cleaned_prompt})
 
-                        if generated:
-                            answer = (
-                                "I created a BI-style dashboard report below. "
-                                "Open the 'Generated BI Dashboard' subtab to view it."
-                            )
-                        else:
-                            answer = ask_dataset_question(
-                                df=chat_df,
-                                question=prompt,
-                                provider=llm_cfg["provider"],
-                                model_name=llm_cfg["model"],
-                                api_key=llm_cfg["api_key"],
-                                base_url=llm_cfg["base_url"],
-                            )
+                    with st.chat_message("user"):
+                        st.markdown(cleaned_prompt)
 
-                    except Exception as exc:
-                        answer = f"AI request failed: {exc}"
+                    with st.spinner("Analyzing your dataset..."):
+                        answer = answer_ai_prompt(chat_df, cleaned_prompt, llm_cfg)
 
-                st.session_state.chat_history.append({"role": "assistant", "content": answer})
+                    st.session_state.chat_history.append({"role": "assistant", "content": answer})
+                    st.session_state.clear_ai_prompt = True
+                    st.rerun()
 
-                with st.chat_message("assistant"):
-                    st.markdown(answer)
+                    with st.chat_message("assistant"):
+                        st.markdown(answer)
 
         with dashboard_subtab:
             st.subheader("Latest AI-generated BI dashboard")
+            st.caption("Any dashboard created from AI Report or Ask AI appears here automatically.")
 
             use_processed_dash = st.toggle(
                 "Use processed dataframe in BI dashboard",

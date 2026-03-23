@@ -1,6 +1,6 @@
-# Preplify AI BI Studio
+# DataCanvas Nexus
 
-Preplify AI BI Studio is a Streamlit application for end-to-end CSV analytics:
+DataCanvas Nexus is a Streamlit application for end-to-end CSV analytics:
 1. Upload and inspect data.
 2. Generate quality reports.
 3. Build visual analytics (2D and 3D).
